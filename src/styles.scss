@@ -1,0 +1,359 @@
+$ink: #050f1c;
+$deep: #0a1c30;
+$panel: #0f2740;
+$line: #1d3d5e;
+$text: #e6f1fa;
+$muted: #8fa9c2;
+$sea: #2fd3c9;
+$amber: #f2b84b;
+$coral: #ff6b5e;
+@mixin card {
+  background: linear-gradient(160deg, $panel, $deep);
+  border: 1px solid $line;
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, #0e3a66 0%, transparent 60%), $ink;
+  color: $text;
+  font:
+    400 15px/1.5 "Public Sans",
+    system-ui,
+    sans-serif;
+  min-height: 100vh;
+}
+h1,
+h2,
+strong {
+  font-family: "Bricolage Grotesque", sans-serif;
+}
+h1 {
+  font-size: clamp(30px, 4vw, 46px);
+  margin: 0 0 4px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+h2 {
+  font-size: 18px;
+  margin: 0 0 12px;
+  font-weight: 500;
+  color: $sea;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  grid-template-areas: "head head" "side main";
+  gap: 22px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 22px 60px;
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+    grid-template-areas: "head" "main" "side";
+  }
+}
+header {
+  grid-area: head;
+  p {
+    margin: 0;
+    color: $muted;
+  }
+}
+aside {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  section {
+    @include card;
+  }
+}
+main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  button {
+    flex: 1;
+    background: transparent;
+    color: $muted;
+    border: 1px solid $line;
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font: inherit;
+    &.on {
+      background: $sea;
+      color: $ink;
+      border-color: $sea;
+      font-weight: 600;
+    }
+    &:hover:not(.on) {
+      border-color: $sea;
+      color: $text;
+    }
+  }
+}
+.num {
+  display: grid;
+  grid-template-columns: 1fr 86px 34px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  span {
+    color: $muted;
+  }
+  em {
+    font-style: normal;
+    color: $muted;
+    font-size: 13px;
+  }
+}
+input {
+  width: 100%;
+  background: $ink;
+  color: $text;
+  border: 1px solid $line;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  &:focus-visible {
+    outline: 2px solid $sea;
+    outline-offset: 1px;
+  }
+}
+button:focus-visible {
+  outline: 2px solid $sea;
+  outline-offset: 2px;
+}
+.hint {
+  color: $muted;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.cargo {
+  width: 100%;
+  border-collapse: collapse;
+  th {
+    text-align: left;
+    color: $muted;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 0 4px 6px;
+  }
+  td {
+    padding: 3px 4px;
+    button {
+      background: none;
+      border: 0;
+      color: $muted;
+      font-size: 20px;
+      cursor: pointer;
+      &:hover {
+        color: $coral;
+      }
+    }
+  }
+  tr.bad input {
+    border-color: $coral;
+  }
+}
+.add {
+  margin-top: 10px;
+  background: transparent;
+  color: $sea;
+  border: 1px dashed $sea;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  width: 100%;
+  &:hover {
+    background: rgba($sea, 0.1);
+  }
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  .stat {
+    @include card;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    span {
+      color: $muted;
+      font-size: 13px;
+    }
+    strong {
+      font-size: 34px;
+      font-weight: 700;
+      line-height: 1.15;
+      small {
+        font-size: 14px;
+        color: $muted;
+        margin-left: 4px;
+        font-weight: 500;
+      }
+    }
+    em {
+      font-style: normal;
+      font-size: 12px;
+      width: fit-content;
+      padding: 1px 8px;
+      border-radius: 999px;
+      border: 1px solid $line;
+      color: $muted;
+      &.simulated {
+        color: $amber;
+        border-color: rgba($amber, 0.5);
+      }
+      &.estimated {
+        color: #9db8ff;
+        border-color: rgba(#9db8ff, 0.5);
+      }
+      &.calculated {
+        color: $sea;
+        border-color: rgba($sea, 0.5);
+      }
+    }
+  }
+}
+
+.alerts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  li {
+    padding: 10px 14px;
+    border-radius: 10px;
+    border-left: 4px solid;
+    background: rgba(255, 255, 255, 0.04);
+    &.err {
+      border-color: $coral;
+      background: rgba($coral, 0.12);
+    }
+    &.warn {
+      border-color: $amber;
+      background: rgba($amber, 0.1);
+    }
+    &.ok {
+      border-color: $sea;
+      background: rgba($sea, 0.08);
+    }
+  }
+}
+
+.views {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  .wide {
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 700px) {
+    grid-template-columns: 1fr;
+  }
+  figure {
+    @include card;
+    margin: 0;
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    figcaption {
+      color: $muted;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+  }
+}
+svg {
+  text {
+    fill: $muted;
+    font-size: 11px;
+  }
+  .hull {
+    fill: #1b4f7a;
+    stroke: $sea;
+    stroke-width: 2;
+  }
+  .deck {
+    fill: rgba($sea, 0.1);
+    stroke: $line;
+    stroke-dasharray: 4 4;
+  }
+  .box {
+    fill: rgba($amber, 0.75);
+    stroke: $amber;
+    &.bad {
+      fill: rgba($coral, 0.8);
+      stroke: $coral;
+    }
+  }
+  .cg {
+    fill: $ink;
+    stroke: $text;
+    stroke-width: 2;
+  }
+  .water {
+    fill: rgba($sea, 0.18);
+  }
+  .wl {
+    stroke: $sea;
+    stroke-width: 2;
+  }
+  .axis {
+    stroke: $line;
+  }
+  .trace {
+    fill: none;
+    stroke: $sea;
+    stroke-width: 2.5;
+  }
+}
+
+.compare {
+  @include card;
+  overflow-x: auto;
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 480px;
+  }
+  th {
+    text-align: left;
+    color: $muted;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-bottom: 1px solid $line;
+  }
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba($line, 0.5);
+    &:last-child {
+      color: $amber;
+    }
+  }
+}
