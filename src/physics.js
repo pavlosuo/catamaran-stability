@@ -12,20 +12,20 @@ export function assess(h, cargo, rho, env) {
   const [xCG, yCG, zCG] = ["x", "y", "z"].map(
     (k) => items.reduce((a, i) => a + i.m * i[k], 0) / M,
   );
-  const V = M / rho; // displaced volume
+  const V = M / rho;
   const draft = V / (h.Cb * 2 * h.L * h.b);
   const It = 2 * ((h.L * h.b ** 3) / 12 + h.L * h.b * (h.s / 2) ** 2);
-  const GM = draft / 2 + It / V - zCG; // KB + BM - KG
+  const GM = draft / 2 + It / V - zCG;
   const ok = GM > 0;
   const heel = ok ? deg(Math.atan(yCG / GM)) : NaN;
   const Tn = ok
     ? 2 * Math.PI * Math.sqrt((0.4 * (h.s + h.b)) ** 2 / (G * GM))
-    : NaN; // estimate, k = 0.4 beam
+    : NaN;
   const lam = (G * env.Tw ** 2) / (2 * Math.PI);
   const slope = deg(Math.atan((Math.PI * env.Hw) / lam));
   const r = Tn / env.Tw;
-  const roll = ok ? Math.min(30, slope / Math.hypot(1 - r * r, 0.2 * r)) : NaN; // damping ratio 0.1 assumed
-  const drag = 0.5 * rho * env.Cd * (2 * h.b * draft) * env.v ** 2; // A = submerged frontal area
+  const roll = ok ? Math.min(30, slope / Math.hypot(1 - r * r, 0.2 * r)) : NaN;
+  const drag = 0.5 * rho * env.Cd * (2 * h.b * draft) * env.v ** 2;
   const freeboard = h.H - draft;
   const W = h.s + h.b;
   const bad = new Set();

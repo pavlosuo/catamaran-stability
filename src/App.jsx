@@ -175,7 +175,6 @@ export default function App() {
           conditions.
         </p>
       </header>
-
       <aside>
         <section>
           <h2>Hull design</h2>
@@ -324,7 +323,6 @@ export default function App() {
           </p>
         </section>
       </aside>
-
       <main>
         <div className="stats">
           {[

@@ -7,6 +7,7 @@ $muted: #8fa9c2;
 $sea: #2fd3c9;
 $amber: #f2b84b;
 $coral: #ff6b5e;
+
 @mixin card {
   background: linear-gradient(160deg, $panel, $deep);
   border: 1px solid $line;
