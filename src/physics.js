@@ -1,4 +1,5 @@
 export const G = 9.81;
+
 export const WATER = { Fresh: 1000, Baltic: 1005, Ocean: 1025 };
 
 const deg = (r) => (r * 180) / Math.PI;

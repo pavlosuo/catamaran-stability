@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { assess, rollSeries, WATER } from "./physics";
+import Scene from "./Scene";
+import "./styles.scss";
 
 const hull = (name, s) => ({
   name,
@@ -11,14 +13,34 @@ const hull = (name, s) => ({
   mass: 0.3,
   cg: { x: 0, y: 0, z: 0.07 },
 });
+
 const HULLS = { A: hull("Baseline", 0.2), B: hull("Revised", 0.12) };
+
 const CARGO = [
   { id: 1, m: 0.15, l: 0.06, w: 0.06, h: 0.04, x: -0.08, y: 0.05 },
   { id: 2, m: 0.1, l: 0.05, w: 0.05, h: 0.04, x: 0.05, y: -0.04 },
   { id: 3, m: 0.15, l: 0.06, w: 0.06, h: 0.05, x: 0.12, y: 0.06 },
 ];
-const K = 700; // px per metre in drawings
+
 const f = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "–");
+
+function Segmented({ options, value, onChange, label }) {
+  return (
+    <div className="seg" role="tablist" aria-label={label}>
+      {options.map(([k, text]) => (
+        <button
+          key={k}
+          role="tab"
+          aria-selected={k === value}
+          className={k === value ? "on" : ""}
+          onClick={() => onChange(k)}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function Num({ label, unit, value, scale = 1000, onChange }) {
   return (
@@ -34,104 +56,48 @@ function Num({ label, unit, value, scale = 1000, onChange }) {
   );
 }
 
-function TopView({ h, cargo, r }) {
-  return (
-    <svg viewBox="-190 -140 380 280" role="img" aria-label="Deck plan">
-      {[-1, 1].map((s) => (
-        <rect
-          key={s}
-          className="hull"
-          x={(-h.L * K) / 2}
-          y={(s * h.s * K) / 2 - (h.b * K) / 2}
-          width={h.L * K}
-          height={h.b * K}
-          rx={(h.b * K) / 2}
-        />
-      ))}
-      <rect
-        className="deck"
-        x={(-h.L * K) / 2}
-        y={(-h.s * K) / 2}
-        width={h.L * K}
-        height={h.s * K}
-      />
-      {cargo.map((c) => (
-        <rect
-          key={c.id}
-          className={r.bad.has(c.id) ? "box bad" : "box"}
-          x={(c.x - c.l / 2) * K}
-          y={(c.y - c.w / 2) * K}
-          width={c.l * K}
-          height={c.w * K}
-          rx="3"
-        />
-      ))}
-      <g className="cg">
-        <circle cx={r.xCG * K} cy={r.yCG * K} r="6" />
-        <path
-          d={`M${r.xCG * K - 10} ${r.yCG * K}h20M${r.xCG * K} ${r.yCG * K - 10}v20`}
-        />
-      </g>
-      <text x="150" y="-120">
-        bow
-      </text>
-    </svg>
-  );
-}
-
-function FrontView({ h, r }) {
-  const d = r.draft * K,
-    hh = h.H * K,
-    W = (h.s + h.b) * K;
-  const heel = Number.isFinite(r.heel) ? r.heel : 0;
-  return (
-    <svg
-      viewBox="-190 -150 380 260"
-      role="img"
-      aria-label="Front view with heel"
-    >
-      <g transform={`rotate(${heel})`}>
-        {[-1, 1].map((s) => (
-          <rect
-            key={s}
-            className="hull"
-            x={(s * h.s * K) / 2 - (h.b * K) / 2}
-            y={d - hh}
-            width={h.b * K}
-            height={hh}
-            rx="10"
-          />
-        ))}
-        <rect className="deck" x={-W / 2} y={d - hh - 7} width={W} height="7" />
-        <g className="cg">
-          <circle cx={r.yCG * K} cy={d - r.zCG * K} r="6" />
-        </g>
-      </g>
-      <rect className="water" x="-190" y="0" width="380" height="110" />
-      <line className="wl" x1="-190" x2="190" y1="0" y2="0" />
-    </svg>
-  );
-}
-
 function RollChart({ r, env }) {
   const pts = rollSeries(r, env);
+  const W = 640,
+    H = 200,
+    L = 44,
+    R = 12,
+    T = 14,
+    B = 28;
   const m = Math.max(5, ...pts.map((p) => Math.abs(p[1])));
-  const path = pts
-    .map(
-      ([t, a], i) =>
-        `${i ? "L" : "M"}${(t / (env.Tw * 4)) * 360 + 20},${70 - (a / m) * 60}`,
-    )
+  const tMax = env.Tw * 4;
+  const X = (t) => L + (t / tMax) * (W - L - R);
+  const Y = (a) => T + (H - T - B) / 2 - (a / m) * ((H - T - B) / 2);
+  const line = pts
+    .map(([t, a], i) => `${i ? "L" : "M"}${X(t).toFixed(1)},${Y(a).toFixed(1)}`)
     .join("");
+  const mid = Y(0);
+  const area = `${line}L${X(pts[pts.length - 1]?.[0] ?? tMax)},${mid}L${X(0)},${mid}Z`;
+  const ticks = [-m, 0, m];
   return (
-    <svg viewBox="0 0 400 140" role="img" aria-label="Simulated roll">
-      <line className="axis" x1="20" x2="380" y1="70" y2="70" />
-      <path className="trace" d={path} />
-      <text x="22" y="14">
-        ±{f(m, 0)}°
-      </text>
-      <text x="300" y="134">
-        {f(env.Tw * 4, 0)} s of waves
-      </text>
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Simulated roll">
+      {ticks.map((v) => (
+        <g key={v}>
+          <line className="grid" x1={L} x2={W - R} y1={Y(v)} y2={Y(v)} />
+          <text className="tick" x={L - 8} y={Y(v) + 4} textAnchor="end">
+            {v > 0 ? "+" : ""}
+            {f(v, 0)}°
+          </text>
+        </g>
+      ))}
+      {[0, 1, 2, 3, 4].map((i) => (
+        <text
+          key={i}
+          className="tick"
+          x={X((tMax / 4) * i)}
+          y={H - 8}
+          textAnchor="middle"
+        >
+          {f((tMax / 4) * i, 0)} s
+        </text>
+      ))}
+      <path className="area" d={area} />
+      <path className="trace" d={line} />
     </svg>
   );
 }
@@ -142,6 +108,7 @@ export default function App() {
   const [cargo, setCargo] = useState(CARGO);
   const [water, setWater] = useState("Baltic");
   const [env, setEnv] = useState({ Hw: 0.03, Tw: 1, v: 0.3, Cd: 0.8 });
+  const [animate, setAnimate] = useState(true);
   const rho = WATER[water];
   const res = useMemo(
     () => ({
@@ -155,6 +122,9 @@ export default function App() {
   const setH = (k, v) => setHulls({ ...hulls, [sel]: { ...h, [k]: v } });
   const setC = (id, k, v) =>
     setCargo(cargo.map((c) => (c.id === id ? { ...c, [k]: v } : c)));
+  const moveCargo = (id, x, y) =>
+    setCargo((cs) => cs.map((c) => (c.id === id ? { ...c, x, y } : c)));
+
   const rows = [
     ["Total mass", "M", 1000, 0, "g"],
     ["Draft", "draft", 1000, 1, "mm"],
@@ -165,30 +135,132 @@ export default function App() {
     ["Roll period", "Tn", 1, 2, "s"],
     ["Drag", "drag", 1, 3, "N"],
   ];
+  const stats = [
+    ["Draft", f(r.draft * 1000), "mm", "calculated"],
+    ["Heel", f(r.heel, 2), "°", "calculated"],
+    ["GM", f(r.GM * 1000, 0), "mm", "calculated"],
+    ["Roll", f(r.roll), "°", "simulated"],
+    ["Drag", f(r.drag, 3), "N", "estimated"],
+  ];
 
   return (
     <div className="app">
-      <header>
-        <h1>Catamaran stability desk</h1>
-        <p>
+      <header className="top">
+        <div>
+          <p className="eyebrow">Arova Engineering Challenge</p>
+          <h1>Catamaran stability</h1>
+        </div>
+        <p className="lead">
           Load the hulls, pick the water, compare two designs under the same
           conditions.
         </p>
       </header>
-      <aside>
-        <section>
-          <h2>Hull design</h2>
-          <div className="tabs">
-            {Object.keys(hulls).map((k) => (
+      <main>
+        <section className="card hero">
+          <div className="stage">
+            <Scene
+              h={h}
+              cargo={cargo}
+              r={r}
+              env={env}
+              animate={animate}
+              onMove={moveCargo}
+            />
+            <div className="overlay tl">
+              <Segmented
+                label="Hull version"
+                value={sel}
+                onChange={setSel}
+                options={Object.keys(hulls).map((k) => [
+                  k,
+                  `${k} · ${hulls[k].name}`,
+                ])}
+              />
+            </div>
+            <div className="overlay br">
               <button
-                key={k}
-                className={k === sel ? "on" : ""}
-                onClick={() => setSel(k)}
+                className={`pill ${animate ? "on" : ""}`}
+                onClick={() => setAnimate(!animate)}
               >
-                {k} · {hulls[k].name}
+                {animate ? "Waves on" : "Waves off"}
               </button>
-            ))}
+            </div>
           </div>
+        </section>
+        <section className="stats">
+          {stats.map(([l, v, u, t]) => (
+            <div className="card stat" key={l}>
+              <span>{l}</span>
+              <strong>
+                {v}
+                <small>{u}</small>
+              </strong>
+              <em className={t}>{t}</em>
+            </div>
+          ))}
+        </section>
+
+        <ul className="alerts">
+          {r.alerts.length ? (
+            r.alerts.map(([lv, t]) => (
+              <li key={t} className={lv}>
+                {t}
+              </li>
+            ))
+          ) : (
+            <li className="ok">All checks passed for version {sel}</li>
+          )}
+        </ul>
+
+        <section className="card">
+          <h2>Roll in waves</h2>
+          <RollChart r={r} env={env} />
+          <p className="hint">Simulated · damping ratio 0.1 assumed</p>
+        </section>
+
+        <section className="card compare">
+          <h2>Version A against version B</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Measure</th>
+                <th>A · {hulls.A.name}</th>
+                <th>B · {hulls.B.name}</th>
+                <th>Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(([l, k, s, d, u]) => {
+                const a = res.A[k] * s,
+                  b = res.B[k] * s;
+                return (
+                  <tr key={k}>
+                    <td>{l}</td>
+                    <td>
+                      {f(a, d)} {u}
+                    </td>
+                    <td>
+                      {f(b, d)} {u}
+                    </td>
+                    <td>
+                      {b - a >= 0 ? "+" : ""}
+                      {f(b - a, d)} {u}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="hint">
+            Same cargo, water and waves for both versions. Replace the model
+            numbers with your own measurements and validate against a tank test.
+          </p>
+        </section>
+      </main>
+
+      <aside>
+        <section className="card">
+          <h2>Hull design</h2>
           <Num
             label="Hull spacing"
             unit="mm"
@@ -214,25 +286,21 @@ export default function App() {
             onChange={(v) => setH("mass", v)}
           />
           <Num
-            label="Centre of gravity height"
+            label="CG height"
             unit="mm"
             value={h.cg.z}
             onChange={(v) => setH("cg", { ...h.cg, z: v })}
           />
         </section>
-        <section>
+
+        <section className="card">
           <h2>Water and waves</h2>
-          <div className="tabs">
-            {Object.keys(WATER).map((w) => (
-              <button
-                key={w}
-                className={w === water ? "on" : ""}
-                onClick={() => setWater(w)}
-              >
-                {w}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label="Water"
+            value={water}
+            onChange={setWater}
+            options={Object.keys(WATER).map((w) => [w, w])}
+          />
           <p className="hint">{rho} kg/m³</p>
           <Num
             label="Wave height"
@@ -255,14 +323,15 @@ export default function App() {
             onChange={(v) => setEnv({ ...env, v })}
           />
           <Num
-            label="Drag coefficient Cd"
+            label="Drag Cd"
             unit=""
             scale={1}
             value={env.Cd}
             onChange={(v) => setEnv({ ...env, Cd: v })}
           />
         </section>
-        <section>
+
+        <section className="card">
           <h2>Cargo</h2>
           <table className="cargo">
             <thead>
@@ -323,91 +392,6 @@ export default function App() {
           </p>
         </section>
       </aside>
-      <main>
-        <div className="stats">
-          {[
-            ["Draft", f(r.draft * 1000), "mm", "calculated"],
-            ["Heel", f(r.heel, 2), "°", "calculated"],
-            ["GM", f(r.GM * 1000, 0), "mm", "calculated"],
-            ["Roll", f(r.roll), "°", "simulated"],
-            ["Drag", f(r.drag, 3), "N", "estimated"],
-          ].map(([l, v, u, t]) => (
-            <div className="stat" key={l}>
-              <span>{l}</span>
-              <strong>
-                {v}
-                <small>{u}</small>
-              </strong>
-              <em className={t}>{t}</em>
-            </div>
-          ))}
-        </div>
-        <ul className="alerts">
-          {r.alerts.length ? (
-            r.alerts.map(([lv, t]) => (
-              <li key={t} className={lv}>
-                {t}
-              </li>
-            ))
-          ) : (
-            <li className="ok">All checks passed for version {sel}</li>
-          )}
-        </ul>
-        <div className="views">
-          <figure>
-            <TopView h={h} cargo={cargo} r={r} />
-            <figcaption>Deck plan with centre of gravity</figcaption>
-          </figure>
-          <figure>
-            <FrontView h={h} r={r} />
-            <figcaption>Front view at {f(r.heel, 2)}° heel</figcaption>
-          </figure>
-          <figure className="wide">
-            <RollChart r={r} env={env} />
-            <figcaption>
-              Roll in waves (simulated, damping ratio 0.1 assumed)
-            </figcaption>
-          </figure>
-        </div>
-        <section className="compare">
-          <h2>Version A against version B</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Measure</th>
-                <th>A · {hulls.A.name}</th>
-                <th>B · {hulls.B.name}</th>
-                <th>Change</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(([l, k, s, d, u]) => {
-                const a = res.A[k] * s,
-                  b = res.B[k] * s;
-                return (
-                  <tr key={k}>
-                    <td>{l}</td>
-                    <td>
-                      {f(a, d)} {u}
-                    </td>
-                    <td>
-                      {f(b, d)} {u}
-                    </td>
-                    <td>
-                      {b - a >= 0 ? "+" : ""}
-                      {f(b - a, d)} {u}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <p className="hint">
-            Same cargo, water and waves for both versions. Replace the model
-            numbers with your own measurements and validate against a tank test.
-          </p>
-        </section>
-      </main>
     </div>
   );
 }
