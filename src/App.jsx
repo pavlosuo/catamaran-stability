@@ -1,27 +1,33 @@
 import { useMemo, useState } from "react";
-import { assess, rollSeries, WATER } from "./physics";
-import Scene from "./Scene";
-import "./styles.scss";
+import { assess, rollSeries, WATER } from "@/data/physics";
+import Scene from "@/Scene";
+import "@/styles.scss";
+import { MODEL } from "@/data/hydro";
+
+const D = MODEL.dims;
 
 const hull = (name, s) => ({
   name,
-  L: 0.4,
-  b: 0.08,
-  H: 0.1,
+  L: D.Ltotal,
+  b: D.b,
+  H: D.H,
   s,
+  deckTop: D.deckTop,
+  deckL: D.deckL,
+  deckW: D.deckW,
+  deckCx: D.deckCenter.x,
   Cb: 0.7,
-  mass: 0.3,
-  cg: { x: 0, y: 0, z: 0.07 },
+  mass: MODEL.empty.mass_kg,
+  cg: { ...MODEL.empty.cg },
 });
-
-const HULLS = { A: hull("Baseline", 0.2), B: hull("Revised", 0.12) };
-
+const HULLS = {
+  A: hull("Printed model", D.s),
+};
 const CARGO = [
-  { id: 1, m: 0.15, l: 0.06, w: 0.06, h: 0.04, x: -0.08, y: 0.05 },
-  { id: 2, m: 0.1, l: 0.05, w: 0.05, h: 0.04, x: 0.05, y: -0.04 },
-  { id: 3, m: 0.15, l: 0.06, w: 0.06, h: 0.05, x: 0.12, y: 0.06 },
+  { id: 1, m: 0.15, l: 0.05, w: 0.05, h: 0.04, x: -0.035, y: 0.04 },
+  { id: 2, m: 0.1, l: 0.04, w: 0.04, h: 0.04, x: 0.035, y: 0.04 },
+  { id: 3, m: 0.15, l: 0.05, w: 0.05, h: 0.05, x: 0.0, y: -0.04 },
 ];
-
 const f = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "–");
 
 function Segmented({ options, value, onChange, label }) {
@@ -113,7 +119,6 @@ export default function App() {
   const res = useMemo(
     () => ({
       A: assess(hulls.A, cargo, rho, env),
-      B: assess(hulls.B, cargo, rho, env),
     }),
     [hulls, cargo, rho, env],
   );
@@ -171,10 +176,7 @@ export default function App() {
                 label="Hull version"
                 value={sel}
                 onChange={setSel}
-                options={Object.keys(hulls).map((k) => [
-                  k,
-                  `${k} · ${hulls[k].name}`,
-                ])}
+                options={Object.keys(hulls).map((k) => [k, `${hulls[k].name}`])}
               />
             </div>
             <div className="overlay br">
@@ -199,7 +201,6 @@ export default function App() {
             </div>
           ))}
         </section>
-
         <ul className="alerts">
           {r.alerts.length ? (
             r.alerts.map(([lv, t]) => (
@@ -211,13 +212,11 @@ export default function App() {
             <li className="ok">All checks passed for version {sel}</li>
           )}
         </ul>
-
         <section className="card">
           <h2>Roll in waves</h2>
           <RollChart r={r} env={env} />
           <p className="hint">Simulated · damping ratio 0.1 assumed</p>
         </section>
-
         <section className="card compare">
           <h2>Version A against version B</h2>
           <table>
@@ -225,26 +224,17 @@ export default function App() {
               <tr>
                 <th>Measure</th>
                 <th>A · {hulls.A.name}</th>
-                <th>B · {hulls.B.name}</th>
                 <th>Change</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(([l, k, s, d, u]) => {
-                const a = res.A[k] * s,
-                  b = res.B[k] * s;
+                const a = res.A[k] * s;
                 return (
                   <tr key={k}>
                     <td>{l}</td>
                     <td>
                       {f(a, d)} {u}
-                    </td>
-                    <td>
-                      {f(b, d)} {u}
-                    </td>
-                    <td>
-                      {b - a >= 0 ? "+" : ""}
-                      {f(b - a, d)} {u}
                     </td>
                   </tr>
                 );
@@ -257,7 +247,6 @@ export default function App() {
           </p>
         </section>
       </main>
-
       <aside>
         <section className="card">
           <h2>Hull design</h2>
@@ -292,7 +281,6 @@ export default function App() {
             onChange={(v) => setH("cg", { ...h.cg, z: v })}
           />
         </section>
-
         <section className="card">
           <h2>Water and waves</h2>
           <Segmented
@@ -330,7 +318,6 @@ export default function App() {
             onChange={(v) => setEnv({ ...env, Cd: v })}
           />
         </section>
-
         <section className="card">
           <h2>Cargo</h2>
           <table className="cargo">

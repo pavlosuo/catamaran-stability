@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, useGLTF } from "@react-three/drei";
 import { ThreeDots } from "react-loader-spinner";
-import { Ocean } from "./Ocean";
+import { Ocean } from "@/Ocean";
 import * as THREE from "three";
 
 export const C = {
@@ -15,7 +15,7 @@ export const C = {
   sun: "#fffcb1",
 };
 
-const MODEL_URL = "/models/result.glb";
+const MODEL_URL = "/models/boat.glb";
 const MODEL_ROTATION = [0, 0, 0];
 const WORLD_SCALE = 50;
 const DECK_T = 0.006;
@@ -47,9 +47,18 @@ function PlaceholderHulls({ h, keel }) {
 function CustomModel({ url, h, keel }) {
   const { scene } = useGLTF(url);
   const obj = useMemo(() => {
+    const material = new THREE.MeshPhysicalMaterial({
+      roughness: 1,
+      transmission: 0,
+      thickness: 1,
+      color: C.cg,
+    });
     const o = scene.clone(true);
     o.traverse((m) => {
-      if (m.isMesh) m.castShadow = true;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.material = material;
+      }
     });
     const box = new THREE.Box3().setFromObject(o);
     const size = box.getSize(new THREE.Vector3());
@@ -67,6 +76,7 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
   const draft = Number.isFinite(r.draft) ? r.draft : 0.03;
   const keel = -draft;
   const deckY = keel + h.H;
+  const top = keel + (MODEL_URL ? (h.deckTop ?? h.H) : h.H + DECK_T);
   const heel = Number.isFinite(r.heel) ? r.heel : 0;
   const roll = Number.isFinite(r.roll) ? clamp(r.roll, 0, 25) : 0;
   const deckW = h.s + h.b;
@@ -83,10 +93,13 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
     if (drag == null) return;
     e.stopPropagation();
     const p = g.current.worldToLocal(e.point.clone());
+    const dl = h.deckL ?? h.L,
+      dw = h.deckW ?? deckW,
+      dcx = h.deckCx ?? 0;
     onMove(
       drag,
-      clamp(p.x, -h.L / 2, h.L / 2),
-      clamp(p.z, -deckW / 2, deckW / 2),
+      clamp(p.x, dcx - dl / 2, dcx + dl / 2),
+      clamp(p.z, -dw / 2, dw / 2),
     );
   };
 
@@ -110,7 +123,7 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
         </RoundedBox>
       )}
       <mesh
-        position={[0, deckY + DECK_T, 0]}
+        position={[0, top, 0]}
         rotation-x={-Math.PI / 2}
         onPointerMove={move}
       >
@@ -120,7 +133,7 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
       {cargo.map((c) => (
         <mesh
           key={c.id}
-          position={[c.x, deckY + DECK_T + c.h / 2, c.y]}
+          position={[c.x, top + c.h / 2, c.y]}
           castShadow
           onPointerDown={(e) => {
             e.stopPropagation();
@@ -141,7 +154,7 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
         renderOrder={10}
       >
         <sphereGeometry args={[0.006, 24, 24]} />
-        <meshBasicMaterial color={C.cg} depthTest={false} />
+        <meshBasicMaterial color={C.hull} depthTest={false} />
       </mesh>
     </group>
   );

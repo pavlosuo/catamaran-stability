@@ -1,7 +1,7 @@
-import path from "path"
-import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
-import { createHtmlPlugin } from "vite-plugin-html"
+import path from "path";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+import { createHtmlPlugin } from "vite-plugin-html";
 
 export default defineConfig({
   plugins: [
@@ -38,4 +38,4 @@ export default defineConfig({
     cssCodeSplit: true,
     cssMinify: "lightningcss",
   },
-})
+});

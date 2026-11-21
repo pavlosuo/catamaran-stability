@@ -3,7 +3,7 @@ import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { Water } from "three/addons/objects/Water.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import * as THREE from "three";
-import { C } from "./Scene";
+import { C } from "@/Scene";
 
 function configureSky(sky, sun) {
   const u = sky.material.uniforms;
