@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, useGLTF } from "@react-three/drei";
 import { ThreeDots } from "react-loader-spinner";
 import { Ocean } from "@/Ocean";
+import { clamp, rad } from "@/utils.js";
 import * as THREE from "three";
 
 export const C = {
@@ -19,10 +20,6 @@ const MODEL_URL = "/models/boat.glb";
 const MODEL_ROTATION = [0, 0, 0];
 const WORLD_SCALE = 50;
 const DECK_T = 0.006;
-
-const rad = (d) => (d * Math.PI) / 180;
-
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 function PlaceholderHulls({ h, keel }) {
   const y = keel + h.H / 2;
@@ -169,7 +166,7 @@ function Exposure({ value }) {
   return null;
 }
 
-export default function Scene({ h, cargo, r, env, animate, onMove }) {
+export function Scene({ h, cargo, r, env, animate, onMove }) {
   const [drag, setDrag] = useState(null);
 
   useEffect(() => {

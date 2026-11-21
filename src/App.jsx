@@ -1,34 +1,26 @@
 import { useMemo, useState } from "react";
 import { assess, rollSeries, WATER } from "@/data/physics";
-import Scene from "@/Scene";
-import "@/styles.scss";
-import { MODEL } from "@/data/hydro";
+import { Scene } from "@/Scene";
+import { parseSensor, analyze } from "@/data/motion";
+import { HULLS, CARGO } from "@/data/data.js";
+import { suggestLayout, f, val, pct, num } from "@/utils.js";
+import { Dashboard } from "@/Dashboard";
+import { RoutePlanner } from "@/RoutePlanner";
 
-const D = MODEL.dims;
-
-const hull = (name, s) => ({
-  name,
-  L: D.Ltotal,
-  b: D.b,
-  H: D.H,
-  s,
-  deckTop: D.deckTop,
-  deckL: D.deckL,
-  deckW: D.deckW,
-  deckCx: D.deckCenter.x,
-  Cb: 0.7,
-  mass: MODEL.empty.mass_kg,
-  cg: { ...MODEL.empty.cg },
-});
-const HULLS = {
-  A: hull("Printed model", D.s),
-};
-const CARGO = [
-  { id: 1, m: 0.15, l: 0.05, w: 0.05, h: 0.04, x: -0.035, y: 0.04 },
-  { id: 2, m: 0.1, l: 0.04, w: 0.04, h: 0.04, x: 0.035, y: 0.04 },
-  { id: 3, m: 0.15, l: 0.05, w: 0.05, h: 0.05, x: 0.0, y: -0.04 },
+const ROWS = [
+  ["Total mass", "M", 1000, 0, "g", null],
+  ["Draft", "draft", 1000, 1, "mm", "lower"],
+  ["Freeboard", "freeboard", 1000, 1, "mm", "higher"],
+  ["Load margin", "loadMargin", 1000, 0, "g", "higher"],
+  ["Metacentric height GM", "GM", 1000, 0, "mm", "higher"],
+  ["Heel", "heel", 1, 2, "°", "lower"],
+  ["Roll amplitude", "roll", 1, 1, "°", "lower"],
+  ["Roll period", "Tn", 1, 2, "s", null],
+  ["Trim", "trim", 1, 2, "°", "lower"],
+  ["Pitch amplitude", "pitch", 1, 1, "°", "lower"],
+  ["Heave amplitude", "heave", 1000, 1, "mm", "lower"],
+  ["Drag", "drag", 1, 3, "N", "lower"],
 ];
-const f = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "–");
 
 function Segmented({ options, value, onChange, label }) {
   return (
@@ -48,12 +40,13 @@ function Segmented({ options, value, onChange, label }) {
   );
 }
 
-function Num({ label, unit, value, scale = 1000, onChange }) {
+function Num({ label, unit, value, scale = 1000, onChange, disabled }) {
   return (
     <label className="num">
       <span>{label}</span>
       <input
         type="number"
+        disabled={disabled}
         value={+(value * scale).toFixed(3)}
         onChange={(e) => onChange(+e.target.value / scale)}
       />
@@ -108,40 +101,255 @@ function RollChart({ r, env }) {
   );
 }
 
+function LineChart({ pts, marks = [], xLabel, yLabel }) {
+  const W = 320,
+    H = 170,
+    L = 46,
+    R = 12,
+    T = 14,
+    B = 30;
+  const good = pts.filter((p) => Number.isFinite(p[1]));
+  if (good.length < 2) return <p className="hint">No stable points to plot.</p>;
+  const x0 = good[0][0],
+    x1 = good[good.length - 1][0];
+  const ys = good.map((p) => p[1]);
+  const y0 = Math.min(...ys),
+    y1 = Math.max(...ys);
+  const X = (x) => L + ((x - x0) / (x1 - x0 || 1)) * (W - L - R);
+  const Y = (y) => T + (1 - (y - y0) / (y1 - y0 || 1)) * (H - T - B);
+  const line = good
+    .map(([x, y], i) => `${i ? "L" : "M"}${X(x).toFixed(1)},${Y(y).toFixed(1)}`)
+    .join("");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={yLabel}>
+      <path d={line} fill="none" stroke="#0a6cff" strokeWidth="2" />
+      <text
+        x={L - 6}
+        y={Y(y1) + 4}
+        textAnchor="end"
+        fontSize="11"
+        fill="currentColor"
+      >
+        {f(y1, 2)}
+      </text>
+      <text
+        x={L - 6}
+        y={Y(y0) + 4}
+        textAnchor="end"
+        fontSize="11"
+        fill="currentColor"
+      >
+        {f(y0, 2)}
+      </text>
+      <text x={L} y={H - 14} fontSize="11" fill="currentColor">
+        {f(x0, 0)}
+      </text>
+      <text
+        x={W - R}
+        y={H - 14}
+        textAnchor="end"
+        fontSize="11"
+        fill="currentColor"
+      >
+        {f(x1, 0)}
+      </text>
+      <text
+        x={(L + W - R) / 2}
+        y={H - 2}
+        textAnchor="middle"
+        fontSize="11"
+        fill="currentColor"
+      >
+        {xLabel}
+      </text>
+      <text x={L + 4} y={10} fontSize="11" fill="currentColor">
+        {yLabel}
+      </text>
+      {marks.map((m) => (
+        <g key={m.label}>
+          <circle
+            cx={X(m.x)}
+            cy={Y(m.y)}
+            r="5"
+            fill="#fff"
+            stroke="#0b1b33"
+            strokeWidth="2"
+          />
+          <text
+            x={X(m.x)}
+            y={Y(m.y) - 9}
+            textAnchor="middle"
+            fontSize="12"
+            fontWeight="700"
+            fill="currentColor"
+          >
+            {m.label}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function SensorChart({ rows }) {
+  const W = 640,
+    H = 160,
+    P = 28;
+  const t0 = rows[0].t;
+  const tMax = rows[rows.length - 1].t - t0 || 1;
+  const m = Math.max(1, ...rows.map((r) => Math.abs(r.roll)));
+  const pts = rows
+    .map(
+      (r) =>
+        `${P + ((r.t - t0) / tMax) * (W - P - 8)},${H / 2 - (r.roll / m) * (H / 2 - 12)}`,
+    )
+    .join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Measured roll">
+      <line
+        x1={P}
+        x2={W - 8}
+        y1={H / 2}
+        y2={H / 2}
+        stroke="currentColor"
+        opacity=".2"
+      />
+      <polyline points={pts} fill="none" stroke="#0a6cff" strokeWidth="1.5" />
+      <text x={4} y={14} fontSize="11" fill="currentColor">
+        ±{m.toFixed(1)}°
+      </text>
+    </svg>
+  );
+}
+
+function parseTests(text) {
+  const out = { A: {}, B: {} };
+  text
+    .trim()
+    .split(/\r?\n/)
+    .slice(1)
+    .forEach((line) => {
+      const [v, fb, h, t, ...note] = line.split(",");
+      const key = v?.trim();
+      if (out[key]) {
+        out[key] = {
+          freeboard: fb?.trim(),
+          heel: h?.trim(),
+          Tn: t?.trim(),
+          note: note.join(",").trim(),
+        };
+      }
+    });
+  return out;
+}
+
 export default function App() {
   const [hulls, setHulls] = useState(HULLS);
   const [sel, setSel] = useState("A");
+  const [view, setView] = useState("stability");
   const [cargo, setCargo] = useState(CARGO);
   const [water, setWater] = useState("Baltic");
+  const [customRho, setCustomRho] = useState(1010);
   const [env, setEnv] = useState({ Hw: 0.03, Tw: 1, v: 0.3, Cd: 0.8 });
   const [animate, setAnimate] = useState(true);
-  const rho = WATER[water];
+  const [meas, setMeas] = useState({ A: {}, B: {} });
+  const [sensor, setSensor] = useState({ A: null, B: null });
+  const rho = water === "Custom" ? customRho : WATER[water];
+
   const res = useMemo(
     () => ({
       A: assess(hulls.A, cargo, rho, env),
+      B: assess(hulls.B, cargo, rho, env),
     }),
     [hulls, cargo, rho, env],
   );
   const h = hulls[sel],
     r = res[sel];
+
   const setH = (k, v) => setHulls({ ...hulls, [sel]: { ...h, [k]: v } });
   const setC = (id, k, v) =>
     setCargo(cargo.map((c) => (c.id === id ? { ...c, [k]: v } : c)));
   const moveCargo = (id, x, y) =>
     setCargo((cs) => cs.map((c) => (c.id === id ? { ...c, x, y } : c)));
 
-  const rows = [
-    ["Total mass", "M", 1000, 0, "g"],
-    ["Draft", "draft", 1000, 1, "mm"],
-    ["Freeboard", "freeboard", 1000, 1, "mm"],
-    ["Metacentric height GM", "GM", 1000, 0, "mm"],
-    ["Heel", "heel", 1, 2, "°"],
-    ["Roll amplitude", "roll", 1, 1, "°"],
-    ["Roll period", "Tn", 1, 2, "s"],
-    ["Drag", "drag", 1, 3, "N"],
+  const sweep = useMemo(() => {
+    const out = [];
+    for (let s = 0.2; s <= 0.4001; s += 0.01) {
+      const a = assess({ ...h, s }, cargo, rho, env);
+      out.push({ s: s * 1000, GM: a.GM * 1000, Tn: a.Tn });
+    }
+    return out;
+  }, [h, cargo, rho, env]);
+
+  const m = meas[sel];
+  const setM = (k, v) => setMeas({ ...meas, [sel]: { ...meas[sel], [k]: v } });
+  const checks = [
+    ["Freeboard", "freeboard", r.freeboard * 1000, 1, "mm"],
+    ["Heel", "heel", Math.abs(r.heel), 2, "°"],
+    ["Roll period", "Tn", r.Tn, 2, "s"],
   ];
+
+  const loadTests = (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setMeas(parseTests(String(reader.result)));
+    reader.readAsText(file);
+    ev.target.value = "";
+  };
+
+  const loadSensor = (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseSensor(String(reader.result));
+      const stats = analyze(rows);
+      setSensor((s) => ({ ...s, [sel]: { rows, stats } }));
+      if (stats)
+        setMeas((mm) => ({
+          ...mm,
+          [sel]: {
+            ...mm[sel],
+            heel: Math.abs(stats.mean).toFixed(2),
+            Tn: Number.isFinite(stats.Tn) ? stats.Tn.toFixed(2) : "",
+          },
+        }));
+    };
+    reader.readAsText(file);
+    ev.target.value = "";
+  };
+  const sens = sensor[sel];
+
+  const exportAll = () => {
+    const data = {
+      exported: new Date().toISOString(),
+      water,
+      density: rho,
+      waves: env,
+      cargo,
+      hulls,
+      measured: meas,
+      results: res,
+    };
+    const text = JSON.stringify(
+      data,
+      (k, v) => (v instanceof Set ? [...v] : v),
+      2,
+    );
+    const url = URL.createObjectURL(
+      new Blob([text], { type: "application/json" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "catamaran-stability.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const stats = [
     ["Draft", f(r.draft * 1000), "mm", "calculated"],
+    ["Freeboard", f(r.freeboard * 1000), "mm", "calculated"],
     ["Heel", f(r.heel, 2), "°", "calculated"],
     ["GM", f(r.GM * 1000, 0), "mm", "calculated"],
     ["Roll", f(r.roll), "°", "simulated"],
@@ -153,120 +361,21 @@ export default function App() {
       <header className="top">
         <div>
           <p className="eyebrow">Arova Engineering Challenge</p>
-          <h1>Catamaran stability</h1>
+          <h1>Ballast-free catamaran</h1>
         </div>
         <p className="lead">
           Load the hulls, pick the water, compare two designs under the same
-          conditions.
+          conditions and check the model against tank tests.
         </p>
       </header>
-      <main>
-        <section className="card hero">
-          <div className="stage">
-            <Scene
-              h={h}
-              cargo={cargo}
-              r={r}
-              env={env}
-              animate={animate}
-              onMove={moveCargo}
-            />
-            <div className="overlay tl">
-              <Segmented
-                label="Hull version"
-                value={sel}
-                onChange={setSel}
-                options={Object.keys(hulls).map((k) => [k, `${hulls[k].name}`])}
-              />
-            </div>
-            <div className="overlay br">
-              <button
-                className={`pill ${animate ? "on" : ""}`}
-                onClick={() => setAnimate(!animate)}
-              >
-                {animate ? "Waves on" : "Waves off"}
-              </button>
-            </div>
-          </div>
-        </section>
-        <section className="stats">
-          {stats.map(([l, v, u, t]) => (
-            <div className="card stat" key={l}>
-              <span>{l}</span>
-              <strong>
-                {v}
-                <small>{u}</small>
-              </strong>
-              <em className={t}>{t}</em>
-            </div>
-          ))}
-        </section>
-        <ul className="alerts">
-          {r.alerts.length ? (
-            r.alerts.map(([lv, t]) => (
-              <li key={t} className={lv}>
-                {t}
-              </li>
-            ))
-          ) : (
-            <li className="ok">All checks passed for version {sel}</li>
-          )}
-        </ul>
-        <section className="card">
-          <h2>Roll in waves</h2>
-          <RollChart r={r} env={env} />
-          <p className="hint">Simulated · damping ratio 0.1 assumed</p>
-        </section>
-        <section className="card compare">
-          <h2>Version A against version B</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Measure</th>
-                <th>A · {hulls.A.name}</th>
-                <th>Change</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(([l, k, s, d, u]) => {
-                const a = res.A[k] * s;
-                return (
-                  <tr key={k}>
-                    <td>{l}</td>
-                    <td>
-                      {f(a, d)} {u}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <p className="hint">
-            Same cargo, water and waves for both versions. Replace the model
-            numbers with your own measurements and validate against a tank test.
-          </p>
-        </section>
-      </main>
       <aside>
         <section className="card">
-          <h2>Hull design</h2>
+          <h2>Hull design (version {sel})</h2>
           <Num
             label="Hull spacing"
             unit="mm"
             value={h.s}
             onChange={(v) => setH("s", v)}
-          />
-          <Num
-            label="Hull width"
-            unit="mm"
-            value={h.b}
-            onChange={(v) => setH("b", v)}
-          />
-          <Num
-            label="Hull length"
-            unit="mm"
-            value={h.L}
-            onChange={(v) => setH("L", v)}
           />
           <Num
             label="Empty mass"
@@ -280,6 +389,16 @@ export default function App() {
             value={h.cg.z}
             onChange={(v) => setH("cg", { ...h.cg, z: v })}
           />
+          <Num label="Hull width (CAD)" unit="mm" value={h.b} disabled />
+          <Num label="Hull length (CAD)" unit="mm" value={h.L} disabled />
+          <p className="hint">
+            Width and length come from the CAD hydrostatic table. Spacing, mass
+            and CG height change the calculation. The 3D view always shows the
+            base model.
+          </p>
+          <button className="add" onClick={exportAll}>
+            Save data to file
+          </button>
         </section>
         <section className="card">
           <h2>Water and waves</h2>
@@ -287,9 +406,19 @@ export default function App() {
             label="Water"
             value={water}
             onChange={setWater}
-            options={Object.keys(WATER).map((w) => [w, w])}
+            options={[...Object.keys(WATER), "Custom"].map((w) => [w, w])}
           />
-          <p className="hint">{rho} kg/m³</p>
+          {water === "Custom" ? (
+            <Num
+              label="Density"
+              unit="kg/m³"
+              scale={1}
+              value={customRho}
+              onChange={setCustomRho}
+            />
+          ) : (
+            <p className="hint">{rho} kg/m³</p>
+          )}
           <Num
             label="Wave height"
             unit="mm"
@@ -348,7 +477,7 @@ export default function App() {
                         setCargo(cargo.filter((x) => x.id !== c.id))
                       }
                     >
-                      ×
+                      X
                     </button>
                   </td>
                 </tr>
@@ -373,12 +502,313 @@ export default function App() {
             }
           >
             Add a box
+          </button>{" "}
+          <button
+            className="add"
+            onClick={() => setCargo(suggestLayout(h, cargo))}
+          >
+            Suggest layout
           </button>
           <p className="hint">
-            Boxes sit on the deck. y is measured from the centreline.
+            Boxes sit on the deck. y is measured from the centreline. Suggest
+            layout places the boxes inside the deck, without overlap, with the
+            centre of gravity as close to the centreline as possible.
           </p>
         </section>
       </aside>
+      <main>
+        <section className="card hero">
+          <div className="stage">
+            <Scene
+              h={h}
+              cargo={cargo}
+              r={r}
+              env={env}
+              animate={animate}
+              onMove={moveCargo}
+            />
+            <div className="overlay tl">
+              <Segmented
+                label="Hull version"
+                value={sel}
+                onChange={setSel}
+                options={Object.keys(hulls).map((k) => [k, hulls[k].name])}
+              />
+            </div>
+            <div className="overlay br">
+              <button
+                className={`pill ${animate ? "on" : ""}`}
+                onClick={() => setAnimate(!animate)}
+              >
+                {animate ? "Waves on" : "Waves off"}
+              </button>
+            </div>
+            <p className="hint absolute">
+              The waves and the motion in the 3D view illustrate the calculated
+              values. They are not a fluid simulation.
+            </p>
+          </div>
+        </section>
+        <section className="stats">
+          {stats.map(([l, v, u, t]) => (
+            <div className="card stat" key={l}>
+              <span>{l}</span>
+              <strong>
+                {v}
+                <small>{u}</small>
+              </strong>
+              <em className={t}>{t}</em>
+            </div>
+          ))}
+        </section>
+        <ul className="alerts">
+          {r.alerts.length ? (
+            r.alerts.map(([lv, t]) => (
+              <li key={t} className={lv}>
+                {t}
+              </li>
+            ))
+          ) : (
+            <li className="ok">All checks passed for version {sel}</li>
+          )}
+        </ul>
+        <Segmented
+          label="Section"
+          value={view}
+          onChange={setView}
+          options={[
+            ["stability", "Stability"],
+            ["validation", "Validation"],
+            ["dashboard", "Dashboard"],
+            ["routes", "Routes"],
+          ]}
+        />
+        {view === "stability" && (
+          <>
+            <section className="card">
+              <h2>Roll in waves</h2>
+              <RollChart r={r} env={env} />
+              <p className="hint">
+                Simulated. One degree of freedom, damping ratio 0.1 assumed.
+              </p>
+            </section>
+            <section className="card compare">
+              <h2>Version A against version B</h2>
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Measure</th>
+                      <th>A · {hulls.A.name}</th>
+                      <th>B · {hulls.B.name}</th>
+                      <th>Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ROWS.map(([l, k, s, d, u, better]) => {
+                      const a = val(res.A, k) * s;
+                      const b = val(res.B, k) * s;
+                      const diff = b - a;
+                      let cls = "";
+                      if (
+                        better &&
+                        Number.isFinite(diff) &&
+                        Math.abs(diff) > 1e-9
+                      ) {
+                        cls =
+                          (better === "lower") === diff < 0 ? "good" : "worse";
+                      }
+                      return (
+                        <tr key={k}>
+                          <td>{l}</td>
+                          <td>
+                            {f(a, d)} {u}
+                          </td>
+                          <td>
+                            {f(b, d)} {u}
+                          </td>
+                          <td className={cls}>
+                            {diff > 0 ? "+" : ""}
+                            {f(diff, d)} {u}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="hint">
+                Same cargo, water and waves for both versions. Green is better,
+                red is worse.
+              </p>
+            </section>
+            <section className="card">
+              <h2>Cargo and buoyancy</h2>
+              <table>
+                <tbody>
+                  <tr>
+                    <td>Water density</td>
+                    <td>{f(rho, 0)} kg/m³</td>
+                  </tr>
+                  <tr>
+                    <td>Total mass</td>
+                    <td>{f(r.M * 1000, 0)} g</td>
+                  </tr>
+                  <tr>
+                    <td>Displaced volume V = M / ρ</td>
+                    <td>{f(r.V * 1e6, 0)} cm³</td>
+                  </tr>
+                  <tr>
+                    <td>Draft</td>
+                    <td>{f(r.draft * 1000, 1)} mm</td>
+                  </tr>
+                  <tr>
+                    <td>Cargo on deck</td>
+                    <td>{f(r.cargoMass * 1000, 0)} g</td>
+                  </tr>
+                  <tr>
+                    <td>Cargo limit (freeboard 30 mm)</td>
+                    <td>{f(r.maxCargo * 1000, 0)} g</td>
+                  </tr>
+                  <tr>
+                    <td>Load margin</td>
+                    <td className={r.loadMargin >= 0 ? "good" : "worse"}>
+                      {f(r.loadMargin * 1000, 0)} g
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="hint">
+                Calculated from the hull table (draft against submerged volume).
+                The limit changes with the water density.
+              </p>
+            </section>
+            <section className="card">
+              <h2>Why no ballast is needed</h2>
+              <p>
+                Stability comes from the hull shape and the weight placement,
+                not from water ballast. Wider spacing raises the metacentric
+                height GM, and a balanced cargo layout keeps the centre of
+                gravity on the centreline. The charts show how the spacing
+                changes GM and the roll period for the current load.
+              </p>
+              <div className="grid2">
+                <LineChart
+                  pts={sweep.map((p) => [p.s, p.GM])}
+                  marks={["A", "B"].map((k) => ({
+                    label: k,
+                    x: hulls[k].s * 1000,
+                    y: res[k].GM * 1000,
+                  }))}
+                  xLabel="hull spacing (mm)"
+                  yLabel="GM (mm)"
+                />
+                <LineChart
+                  pts={sweep.map((p) => [p.s, p.Tn])}
+                  marks={["A", "B"].map((k) => ({
+                    label: k,
+                    x: hulls[k].s * 1000,
+                    y: res[k].Tn,
+                  }))}
+                  xLabel="hull spacing (mm)"
+                  yLabel="roll period (s)"
+                />
+              </div>
+              <p className="hint">Calculated. A and B mark the two versions.</p>
+            </section>
+          </>
+        )}
+        {view === "validation" && (
+          <>
+            <section className="card">
+              <h2>
+                Validation: calculation against measurement (version {sel})
+              </h2>
+              <p className="hint">
+                Load tests (CSV: version,freeboard_mm,heel_deg,period_s,note):{" "}
+                <input type="file" accept=".csv" onChange={loadTests} />
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Quantity</th>
+                    <th>Calculated</th>
+                    <th>Measured</th>
+                    <th>Difference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {checks.map(([l, k, calc, d, u]) => {
+                    const diff = pct(calc, num(m[k]));
+                    const ok = Number.isFinite(diff);
+                    return (
+                      <tr key={k}>
+                        <td>{l}</td>
+                        <td>
+                          {f(calc, d)} {u}
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="any"
+                            value={m[k] ?? ""}
+                            onChange={(ev) => setM(k, ev.target.value)}
+                          />{" "}
+                          {u}
+                        </td>
+                        <td
+                          className={
+                            ok ? (Math.abs(diff) <= 10 ? "good" : "worse") : ""
+                          }
+                        >
+                          {ok
+                            ? `${diff > 0 ? "+" : ""}${diff.toFixed(0)} %`
+                            : "–"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <textarea
+                placeholder="Test conditions and reasons for the difference (mass, water, cargo position...)"
+                value={m.note ?? ""}
+                onChange={(ev) => setM("note", ev.target.value)}
+                rows={3}
+                style={{ width: "100%", marginTop: 8 }}
+              />
+              <p className="hint">
+                Set the same cargo and water in the app as in the test before
+                you read the difference. Green means within 10 %.
+              </p>
+            </section>
+            <section className="card">
+              <h2>Recorded MPU-6050 data (version {sel})</h2>
+              <p className="hint">
+                CSV (t_ms,roll_deg,pitch_deg):{" "}
+                <input type="file" accept=".csv" onChange={loadSensor} />
+              </p>
+              {sens && sens.stats ? (
+                <>
+                  <SensorChart rows={sens.rows} />
+                  <p className="hint">
+                    Measured: heel {f(Math.abs(sens.stats.mean), 2)}°, period{" "}
+                    {f(sens.stats.Tn, 2)} s, amplitude {f(sens.stats.amp, 1)}°.
+                    Calculated period {f(r.Tn, 2)} s. Heel and period were
+                    copied into the table above.
+                  </p>
+                </>
+              ) : (
+                <p className="hint">
+                  No file loaded, or the file has too few samples.
+                </p>
+              )}
+            </section>
+          </>
+        )}
+        {view === "dashboard" && <Dashboard r={r} env={env} cargo={cargo} />}
+        {view === "routes" && <RoutePlanner hull={h} cargo={cargo} env={env} />}
+      </main>
     </div>
   );
 }

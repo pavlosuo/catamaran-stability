@@ -1,13 +1,24 @@
-import { atVolume, MODEL } from "@/data/hydro";
+import { atVolume, atDraft, MODEL } from "@/data/hydro";
 
 export const GRAVITY = 9.81;
 
 export const WATER = { Fresh: 1000, Baltic: 1005, Ocean: 1025 };
 
+export const LIMITS = {
+  heel: 5,
+  roll: 10,
+  pitch: 10,
+  trim: 3,
+  freeboard: 0.03,
+  cargoMin: 0.15,
+  cargoMax: 0.4,
+};
+
 const radiansToDegrees = (radians) => (radians * 180) / Math.PI;
 
 export function assess(hull, cargo, waterDensity, sea) {
   const deckTopHeight = hull.deckTop ?? hull.H;
+  const cargoMass = cargo.reduce((sum, item) => sum + item.m, 0);
   const massPoints = [
     { mass: hull.mass, ...hull.cg },
     ...cargo.map((item) => ({
@@ -59,6 +70,34 @@ export function assess(hull, cargo, waterDensity, sea) {
     0.5 * waterDensity * sea.Cd * (2 * hull.b * draft) * sea.v ** 2;
   const freeboard = hull.H - draft;
 
+  const GML = hydrostatics.KB + hydrostatics.BML - gravityCenterZ;
+  const trim =
+    GML > 0
+      ? radiansToDegrees(Math.atan((gravityCenterX - hydrostatics.LCB) / GML))
+      : NaN;
+  const pitchPeriod =
+    GML > 0
+      ? 2 * Math.PI * Math.sqrt((0.25 * hull.L) ** 2 / (GRAVITY * GML))
+      : NaN;
+  const pitchRatio = pitchPeriod / sea.Tw;
+  const pitchAmplitude =
+    GML > 0
+      ? Math.min(
+          20,
+          waveSlope / Math.hypot(1 - pitchRatio ** 2, 0.2 * pitchRatio),
+        )
+      : NaN;
+  const heavePeriod =
+    2 *
+    Math.PI *
+    Math.sqrt((2 * totalMass) / (waterDensity * GRAVITY * hydrostatics.Awp));
+  const heaveRatio = heavePeriod / sea.Tw;
+  const heaveAmplitude =
+    sea.Hw / 2 / Math.hypot(1 - heaveRatio ** 2, 0.6 * heaveRatio);
+
+  const maxMass = atDraft(hull.H - LIMITS.freeboard).V * waterDensity;
+  const maxCargo = Math.max(0, maxMass - hull.mass);
+  const loadMargin = maxMass - hull.mass - cargoMass;
   const deckLength = hull.deckL ?? hull.L;
   const deckWidth = hull.deckW ?? hull.s + hull.b;
   const deckCenterX = hull.deckCx ?? 0;
@@ -84,30 +123,47 @@ export function assess(hull, cargo, waterDensity, sea) {
     alerts.push(["err", "Load exceeds the hulls' buoyancy: the vessel sinks"]);
   if (!isStable)
     alerts.push(["err", "GM is zero or negative: the vessel is unstable"]);
-  if (isStable && Math.abs(heelAngle) > 5)
-    alerts.push(["err", `Heel ${heelAngle.toFixed(1)}° is above the 5° limit`]);
-  if (freeboard < 0.03)
+  if (hull.s - hull.b < 0.01)
+    alerts.push([
+      "err",
+      "The hulls touch: the spacing must be larger than the hull width",
+    ]);
+  if (isStable && Math.abs(heelAngle) > LIMITS.heel)
+    alerts.push([
+      "err",
+      `Heel ${heelAngle.toFixed(1)}° is above the ${LIMITS.heel}° limit`,
+    ]);
+  if (freeboard < LIMITS.freeboard)
     alerts.push([
       freeboard < 0 ? "err" : "warn",
-      `Freeboard is only ${(freeboard * 1000).toFixed(0)} mm`,
+      `Freeboard is only ${(freeboard * 1000).toFixed(0)} mm (limit ${LIMITS.freeboard * 1000} mm)`,
     ]);
-  if (isStable && rollAmplitude > 10)
+  if (isStable && rollAmplitude > LIMITS.roll)
     alerts.push([
       "warn",
-      `Simulated roll ${rollAmplitude.toFixed(1)}° is above 10°`,
+      `Simulated roll ${rollAmplitude.toFixed(1)}° is above ${LIMITS.roll}°`,
+    ]);
+  if (Number.isFinite(trim) && Math.abs(trim) > LIMITS.trim)
+    alerts.push([
+      "warn",
+      `Trim ${trim.toFixed(1)}° is above the ${LIMITS.trim}° limit`,
     ]);
   if (invalidCargoIds.size)
     alerts.push(["err", "Some cargo overlaps or hangs over the deck edge"]);
-  if (totalMass - hull.mass > 0.4)
+  if (cargoMass > LIMITS.cargoMax + 1e-9)
     alerts.push(["warn", "Cargo is above the 400 g test range"]);
+  if (cargo.length && cargoMass < LIMITS.cargoMin - 1e-9)
+    alerts.push(["warn", "Cargo is below the 150 g test range"]);
 
   return {
     M: totalMass,
+    cargoMass,
     xCG: gravityCenterX,
     yCG: gravityCenterY,
     zCG: gravityCenterZ,
     V: displacedVolume,
     draft,
+    sinks,
     KB: hydrostatics.KB,
     BM: metacentricRadius,
     GM: metacentricHeight,
@@ -117,6 +173,14 @@ export function assess(hull, cargo, waterDensity, sea) {
     slope: waveSlope,
     drag: dragForce,
     freeboard,
+    trim,
+    GML,
+    Tp: pitchPeriod,
+    pitch: pitchAmplitude,
+    Th: heavePeriod,
+    heave: heaveAmplitude,
+    maxCargo,
+    loadMargin,
     bad: invalidCargoIds,
     alerts,
   };

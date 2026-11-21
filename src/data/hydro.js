@@ -18,6 +18,16 @@ export function atVolume(V) {
   return lerp(T[i - 1], T[i], k);
 }
 
+export function atDraft(d) {
+  if (!(d > 0)) return { ...T[0] };
+  const last = T[T.length - 1];
+  if (d >= last.draft) return { ...last };
+  let i = 1;
+  while (T[i].draft < d) i++;
+  const k = (d - T[i - 1].draft) / (T[i].draft - T[i - 1].draft);
+  return lerp(T[i - 1], T[i], k);
+}
+
 export const atMass = (M, rho) => atVolume(M / rho);
 
 export function GM(M, rho, KG) {
