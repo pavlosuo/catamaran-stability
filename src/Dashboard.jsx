@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LIMITS } from "@/data/physics";
-import { f, avg } from "@/utils.js";
+import { f, avg } from "@/utils";
 
 const KEEP = 200;
 
@@ -147,7 +147,7 @@ export function Dashboard({ r, env, cargo }) {
     setSource("sim");
   };
 
-  useEffect(() => () => void disconnect(), []);
+  useEffect(() => () => disconnect(), []);
 
   const last = data[data.length - 1];
   const win = last ? data.filter((d) => d.t > last.t - 5) : [];

@@ -3,7 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { assess, LIMITS } from "@/data/physics";
 import { ROUTES, evalRoute, densityColor } from "@/data/routes";
-import { f } from "@/utils.js";
+import { f } from "@/utils";
 
 function RouteMap({ selected, onSelect }) {
   const el = useRef(null);

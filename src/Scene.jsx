@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, useGLTF } from "@react-three/drei";
 import { ThreeDots } from "react-loader-spinner";
 import { Ocean } from "@/Ocean";
-import { clamp, rad } from "@/utils.js";
+import { getZone, zoneLimits, clamp, rad } from "@/utils";
 import * as THREE from "three";
 
 export const C = {
@@ -89,15 +89,11 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
   const move = (e) => {
     if (drag == null) return;
     e.stopPropagation();
+    const item = cargo.find((c) => c.id === drag);
+    if (!item) return;
     const p = g.current.worldToLocal(e.point.clone());
-    const dl = h.deckL ?? h.L,
-      dw = h.deckW ?? deckW,
-      dcx = h.deckCx ?? 0;
-    onMove(
-      drag,
-      clamp(p.x, dcx - dl / 2, dcx + dl / 2),
-      clamp(p.z, -dw / 2, dw / 2),
-    );
+    const { xMin, xMax, yMin, yMax } = zoneLimits(getZone(h), item);
+    onMove(drag, clamp(p.x, xMin, xMax), clamp(p.z, yMin, yMax));
   };
 
   return (
@@ -127,25 +123,28 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
         <planeGeometry args={[2, 2]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {cargo.map((c) => (
-        <mesh
-          key={c.id}
-          position={[c.x, top + c.h / 2, c.y]}
-          castShadow
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            setDrag(c.id);
-          }}
-          onPointerOver={() => (document.body.style.cursor = "grab")}
-          onPointerOut={() => (document.body.style.cursor = "")}
-        >
-          <boxGeometry args={[c.l, c.h, c.w]} />
-          <meshStandardMaterial
-            color={r.bad.has(c.id) ? C.bad : C.cargo}
-            roughness={0.45}
-          />
-        </mesh>
-      ))}
+      {cargo.map(
+        (c) =>
+          !r.bad.has(c.id) && (
+            <mesh
+              key={c.id}
+              position={[c.x, top + c.h / 2, c.y]}
+              castShadow
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                setDrag(c.id);
+              }}
+              onPointerOver={() => (document.body.style.cursor = "grab")}
+              onPointerOut={() => (document.body.style.cursor = "")}
+            >
+              <boxGeometry args={[c.l, c.h, c.w]} />
+              <meshStandardMaterial
+                color={r.bad.has(c.id) ? C.bad : C.cargo}
+                roughness={0.45}
+              />
+            </mesh>
+          ),
+      )}
       <mesh
         position={[r.xCG || 0, keel + (r.zCG || 0), r.yCG || 0]}
         renderOrder={10}

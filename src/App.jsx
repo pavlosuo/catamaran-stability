@@ -2,10 +2,11 @@ import { useMemo, useState } from "react";
 import { assess, rollSeries, WATER } from "@/data/physics";
 import { Scene } from "@/Scene";
 import { parseSensor, analyze } from "@/data/motion";
-import { HULLS, CARGO } from "@/data/data.js";
-import { suggestLayout, f, val, pct, num } from "@/utils.js";
+import { HULLS, CARGO } from "@/data/data";
+import { suggestLayout, f, val, pct, num } from "@/utils";
 import { Dashboard } from "@/Dashboard";
 import { RoutePlanner } from "@/RoutePlanner";
+import { clsx } from "clsx";
 
 const ROWS = [
   ["Total mass", "M", 1000, 0, "g", null],
@@ -40,9 +41,17 @@ function Segmented({ options, value, onChange, label }) {
   );
 }
 
-function Num({ label, unit, value, scale = 1000, onChange, disabled }) {
+function Num({
+  label,
+  unit,
+  value,
+  scale = 1000,
+  onChange,
+  disabled,
+  className,
+}) {
   return (
-    <label className="num">
+    <label className={clsx("num", className)}>
       <span>{label}</span>
       <input
         type="number"
@@ -255,7 +264,6 @@ export default function App() {
   const [meas, setMeas] = useState({ A: {}, B: {} });
   const [sensor, setSensor] = useState({ A: null, B: null });
   const rho = water === "Custom" ? customRho : WATER[water];
-
   const res = useMemo(
     () => ({
       A: assess(hulls.A, cargo, rho, env),
@@ -263,8 +271,8 @@ export default function App() {
     }),
     [hulls, cargo, rho, env],
   );
-  const h = hulls[sel],
-    r = res[sel];
+  const h = hulls[sel];
+  const r = res[sel];
 
   const setH = (k, v) => setHulls({ ...hulls, [sel]: { ...h, [k]: v } });
   const setC = (id, k, v) =>
@@ -415,6 +423,7 @@ export default function App() {
               scale={1}
               value={customRho}
               onChange={setCustomRho}
+              className="custom-input"
             />
           ) : (
             <p className="hint">{rho} kg/m³</p>
@@ -477,7 +486,23 @@ export default function App() {
                         setCargo(cargo.filter((x) => x.id !== c.id))
                       }
                     >
-                      X
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
                     </button>
                   </td>
                 </tr>
@@ -487,25 +512,43 @@ export default function App() {
           <button
             className="add"
             onClick={() =>
-              setCargo([
-                ...cargo,
-                {
-                  id: Date.now(),
-                  m: 0.05,
-                  l: 0.05,
-                  w: 0.05,
-                  h: 0.04,
-                  x: 0,
-                  y: 0,
-                },
-              ])
+              setCargo(
+                suggestLayout(
+                  h,
+                  [
+                    ...cargo,
+                    {
+                      id: Date.now(),
+                      m: 0.05,
+                      l: 0.05,
+                      w: 0.05,
+                      h: 0.04,
+                      x: 0,
+                      y: 0,
+                    },
+                  ],
+                  {
+                    deckLength: h.deckL ?? h.L,
+                    deckWidth: h.deckW ?? deckW,
+                    deckCenterX: h.deckCx ?? 0,
+                  },
+                ),
+              )
             }
           >
             Add a box
           </button>{" "}
           <button
             className="add"
-            onClick={() => setCargo(suggestLayout(h, cargo))}
+            onClick={() =>
+              setCargo(
+                suggestLayout(h, cargo, {
+                  deckLength: h.deckL ?? h.L,
+                  deckWidth: h.deckW ?? deckW,
+                  deckCenterX: h.deckCx ?? 0,
+                }),
+              )
+            }
           >
             Suggest layout
           </button>
@@ -720,15 +763,23 @@ export default function App() {
         )}
         {view === "validation" && (
           <>
-            <section className="card">
+            <section className="card validation">
               <h2>
                 Validation: calculation against measurement (version {sel})
               </h2>
               <p className="hint">
                 Load tests (CSV: version,freeboard_mm,heel_deg,period_s,note):{" "}
-                <input type="file" accept=".csv" onChange={loadTests} />
+                <label className="file-label" htmlFor="file-csv-2">
+                  <input
+                    id="file-csv-2"
+                    type="file"
+                    accept=".csv"
+                    onChange={loadTests}
+                  />
+                  Load tests
+                </label>
               </p>
-              <table>
+              <table className="vtable">
                 <thead>
                   <tr>
                     <th>Quantity</th>
@@ -748,13 +799,15 @@ export default function App() {
                           {f(calc, d)} {u}
                         </td>
                         <td>
-                          <input
-                            type="number"
-                            step="any"
-                            value={m[k] ?? ""}
-                            onChange={(ev) => setM(k, ev.target.value)}
-                          />{" "}
-                          {u}
+                          <div className="meas">
+                            <input
+                              type="number"
+                              step="any"
+                              value={m[k] ?? ""}
+                              onChange={(ev) => setM(k, ev.target.value)}
+                            />
+                            <span>{u}</span>
+                          </div>
                         </td>
                         <td
                           className={
@@ -771,11 +824,11 @@ export default function App() {
                 </tbody>
               </table>
               <textarea
+                className="note"
                 placeholder="Test conditions and reasons for the difference (mass, water, cargo position...)"
                 value={m.note ?? ""}
                 onChange={(ev) => setM("note", ev.target.value)}
                 rows={3}
-                style={{ width: "100%", marginTop: 8 }}
               />
               <p className="hint">
                 Set the same cargo and water in the app as in the test before
@@ -786,7 +839,15 @@ export default function App() {
               <h2>Recorded MPU-6050 data (version {sel})</h2>
               <p className="hint">
                 CSV (t_ms,roll_deg,pitch_deg):{" "}
-                <input type="file" accept=".csv" onChange={loadSensor} />
+                <label className="file-label" htmlFor="file-csv">
+                  <input
+                    id="file-csv"
+                    type="file"
+                    accept=".csv"
+                    onChange={loadSensor}
+                  />
+                  Load sensor
+                </label>
               </p>
               {sens && sens.stats ? (
                 <>

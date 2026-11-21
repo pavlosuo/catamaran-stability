@@ -1,4 +1,5 @@
 import { atVolume, atDraft, MODEL } from "@/data/hydro";
+import { getZone, getInvalidIds } from "@/utils.js";
 
 export const GRAVITY = 9.81;
 
@@ -98,25 +99,7 @@ export function assess(hull, cargo, waterDensity, sea) {
   const maxMass = atDraft(hull.H - LIMITS.freeboard).V * waterDensity;
   const maxCargo = Math.max(0, maxMass - hull.mass);
   const loadMargin = maxMass - hull.mass - cargoMass;
-  const deckLength = hull.deckL ?? hull.L;
-  const deckWidth = hull.deckW ?? hull.s + hull.b;
-  const deckCenterX = hull.deckCx ?? 0;
-  const invalidCargoIds = new Set();
-  cargo.forEach((item, index) => {
-    const overhangs =
-      Math.abs(item.x - deckCenterX) + item.l / 2 > deckLength / 2 ||
-      Math.abs(item.y) + item.w / 2 > deckWidth / 2;
-    if (overhangs) invalidCargoIds.add(item.id);
-    cargo.slice(index + 1).forEach((other) => {
-      const overlaps =
-        Math.abs(item.x - other.x) < (item.l + other.l) / 2 &&
-        Math.abs(item.y - other.y) < (item.w + other.w) / 2;
-      if (overlaps) {
-        invalidCargoIds.add(item.id);
-        invalidCargoIds.add(other.id);
-      }
-    });
-  });
+  const invalidCargoIds = getInvalidIds(cargo, getZone(hull));
 
   const alerts = [];
   if (sinks)
