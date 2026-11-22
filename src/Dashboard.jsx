@@ -64,7 +64,7 @@ function TiltChart({ data }) {
   );
 }
 
-export function Dashboard({ r, env, cargo, sensor }) {
+export function Dashboard({ r, env, cargo, sensor, pick, setPick }) {
   const [simData, setSimData] = useState([]);
   const t0 = useRef(performance.now());
   const model = useRef({ r, env });
@@ -165,18 +165,29 @@ export function Dashboard({ r, env, cargo, sensor }) {
           >
             Simulated
           </button>{" "}
+          {!live && (
+            <>
+              <button
+                className={`pill ${pick === "serial" ? "on" : ""}`}
+                onClick={() => setPick("serial")}
+              >
+                Arduino (USB)
+              </button>
+              <button
+                className={`pill ${pick === "watch" ? "on" : ""}`}
+                onClick={() => setPick("watch")}
+              >
+                Bangle.js (Bluetooth)
+              </button>{" "}
+            </>
+          )}
           {live ? (
             <button className="pill on" onClick={sensor.disconnect}>
-              Disconnect MPU-6050
+              Disconnect {sensor.source === "watch" ? "Bangle.js" : "MPU-6050"}
             </button>
           ) : (
-            <button className="pill" onClick={sensor.connect}>
-              Connect MPU-6050
-            </button>
-          )}
-          {live && (
-            <button className="pill" onClick={sensor.setZero}>
-              Zero
+            <button className="pill" onClick={() => sensor.connect(pick)}>
+              Connect
             </button>
           )}
           <button className="pill" onClick={saveCsv}>
@@ -186,8 +197,10 @@ export function Dashboard({ r, env, cargo, sensor }) {
         <TiltChart data={data} />
         <p className="hint">
           {live
-            ? "Measured: MPU-6050 over USB serial."
-            : "Simulated from the hydrostatic model with small random noise."}{" "}
+            ? sensor.source === "watch"
+              ? "Measured: Bangle.js over Bluetooth."
+              : "Measured: MPU-6050 over USB serial."
+            : "Simulated from the hydrostatic model with small random noise."}
           {sensor.status} Serial format: one line per sample, ax,ay,az,gx,gy,gz
           at 115200 baud.
         </p>

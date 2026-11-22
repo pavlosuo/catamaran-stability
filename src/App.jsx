@@ -263,6 +263,7 @@ function parseTests(text) {
 
 export default function App() {
   const live = useSensor();
+  const [pick, setPick] = useState("serial");
   const [hulls, setHulls] = useState(HULLS);
   const [sel, setSel] = useState("A");
   const [view, setView] = useState("stability");
@@ -957,7 +958,14 @@ export default function App() {
           </>
         )}
         <div hidden={view !== "dashboard"}>
-          <Dashboard r={r} env={env} cargo={cargo} sensor={live} />
+          <Dashboard
+            r={r}
+            env={env}
+            cargo={cargo}
+            sensor={live}
+            pick={pick}
+            setPick={setPick}
+          />
         </div>
         {view === "routes" && <RoutePlanner hull={h} cargo={cargo} env={env} />}
       </main>
