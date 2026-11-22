@@ -64,32 +64,36 @@ function TiltChart({ data }) {
   );
 }
 
-export function Dashboard({ r, env, cargo }) {
-  const [source, setSource] = useState("sim");
-  const [data, setData] = useState([]);
-  const [status, setStatus] = useState("");
+export function Dashboard({ r, env, cargo, sensor }) {
+  const [simData, setSimData] = useState([]);
   const t0 = useRef(performance.now());
   const model = useRef({ r, env });
   model.current = { r, env };
-  const serial = useRef(null);
-  const push = (s) => setData((d) => [...d.slice(-(KEEP - 1)), s]);
+
+  const live = sensor.connected;
+  const data = live ? sensor.data : simData;
 
   useEffect(() => {
-    if (source !== "sim") return;
+    if (live) return;
+    setSimData([]);
+    t0.current = performance.now();
     const id = setInterval(() => {
       const { r, env } = model.current;
       const t = (performance.now() - t0.current) / 1000;
       const n = () => (Math.random() - 0.5) * 0.3;
       const ok = (v) => (Number.isFinite(v) ? v : 0);
       const w = (2 * Math.PI * t) / env.Tw;
-      push({
-        t,
-        roll: ok(r.heel) + ok(r.roll) * Math.sin(w) + n(),
-        pitch: ok(r.trim) + ok(r.pitch) * Math.sin(w + 1) + n(),
-      });
+      setSimData((d) => [
+        ...d.slice(-(KEEP - 1)),
+        {
+          t,
+          roll: ok(r.heel) + ok(r.roll) * Math.sin(w) + n(),
+          pitch: ok(r.trim) + ok(r.pitch) * Math.sin(w + 1) + n(),
+        },
+      ]);
     }, 50);
     return () => clearInterval(id);
-  }, [source]);
+  }, [live]);
 
   const saveCsv = () => {
     const text =
@@ -105,64 +109,6 @@ export function Dashboard({ r, env, cargo }) {
     a.download = "tilt.csv";
     a.click();
   };
-
-  const connect = async () => {
-    if (!("serial" in navigator)) {
-      setStatus("Web Serial is not available. Use Chrome or Edge.");
-      return;
-    }
-    try {
-      const port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 115200 });
-      const decoder = new TextDecoderStream();
-      const closed = port.readable.pipeTo(decoder.writable);
-      const reader = decoder.readable.getReader();
-      serial.current = { port, reader, closed };
-      setData([]);
-      setSource("live");
-      setStatus("Connected");
-      let buf = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += value;
-        const lines = buf.split("\n");
-        buf = lines.pop();
-        lines.forEach((line) => {
-          const nums = line.trim().split(",").map(Number);
-          const [roll, pitch] = nums.slice(-2);
-          if (
-            nums.length >= 2 &&
-            Number.isFinite(roll) &&
-            Number.isFinite(pitch)
-          )
-            push({ t: (performance.now() - t0.current) / 1000, roll, pitch });
-        });
-      }
-    } catch (e) {
-      setStatus(`Serial error: ${e.message}`);
-    }
-  };
-
-  const disconnect = async () => {
-    const s = serial.current;
-    if (!s) return;
-    serial.current = null;
-    try {
-      await s.reader.cancel();
-      await s.closed.catch(() => {});
-      await s.port.close();
-    } catch {}
-    setStatus("Disconnected");
-  };
-
-  const useSim = async () => {
-    await disconnect();
-    setData([]);
-    setSource("sim");
-  };
-
-  useEffect(() => () => disconnect(), []);
 
   const last = data[data.length - 1];
   const win = last ? data.filter((d) => d.t > last.t - 5) : [];
@@ -208,23 +154,29 @@ export function Dashboard({ r, env, cargo }) {
     );
   if (!advice.length) advice.push("No correction needed for the current load.");
 
-  const live = source === "live";
-
   return (
-    <>
+    <div className="flex">
       <section className="card">
         <h2>Live tilt dashboard</h2>
         <p>
-          <button className={`pill ${!live ? "on" : ""}`} onClick={useSim}>
+          <button
+            className={`pill ${!live ? "on" : ""}`}
+            onClick={sensor.disconnect}
+          >
             Simulated
           </button>{" "}
           {live ? (
-            <button className="pill on" onClick={useSim}>
+            <button className="pill on" onClick={sensor.disconnect}>
               Disconnect MPU-6050
             </button>
           ) : (
-            <button className="pill" onClick={connect}>
+            <button className="pill" onClick={sensor.connect}>
               Connect MPU-6050
+            </button>
+          )}
+          {live && (
+            <button className="pill" onClick={sensor.setZero}>
+              Zero
             </button>
           )}
           <button className="pill" onClick={saveCsv}>
@@ -236,8 +188,8 @@ export function Dashboard({ r, env, cargo }) {
           {live
             ? "Measured: MPU-6050 over USB serial."
             : "Simulated from the hydrostatic model with small random noise."}{" "}
-          {status} Serial format: one line per sample, roll_deg,pitch_deg at
-          115200 baud.
+          {sensor.status} Serial format: one line per sample, ax,ay,az,gx,gy,gz
+          at 115200 baud.
         </p>
       </section>
       <section className="stats">
@@ -278,6 +230,6 @@ export function Dashboard({ r, env, cargo }) {
           ))}
         </ul>
       </section>
-    </>
+    </div>
   );
 }

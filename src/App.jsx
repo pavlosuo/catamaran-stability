@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react";
 import { assess, rollSeries, WATER } from "@/data/physics";
 import { Scene } from "@/Scene";
 import { parseSensor, analyze } from "@/data/motion";
@@ -15,6 +14,8 @@ import {
 import { Dashboard } from "@/Dashboard";
 import { RoutePlanner } from "@/RoutePlanner";
 import { clsx } from "clsx";
+import { useEffect, useMemo, useState } from "react";
+import { useSensor, measureMotion } from "@/useSensor";
 
 const ROWS = [
   ["Total mass", "M", 1000, 0, "g", null],
@@ -261,6 +262,7 @@ function parseTests(text) {
 }
 
 export default function App() {
+  const live = useSensor();
   const [hulls, setHulls] = useState(HULLS);
   const [sel, setSel] = useState("A");
   const [view, setView] = useState("stability");
@@ -271,6 +273,8 @@ export default function App() {
   const [animate, setAnimate] = useState(true);
   const [meas, setMeas] = useState({ A: {}, B: {} });
   const [sensor, setSensor] = useState({ A: null, B: null });
+  const [mode, setMode] = useState("calculated");
+  const sens = sensor[sel];
   const rho = water === "Custom" ? customRho : WATER[water];
   const res = useMemo(
     () => ({
@@ -281,14 +285,37 @@ export default function App() {
   );
   const h = hulls[sel];
   const r = res[sel];
-
-  const setH = (k, v) => setHulls({ ...hulls, [sel]: { ...h, [k]: v } });
-
-  const setC = (id, k, v) =>
-    setCargo(cargo.map((c) => (c.id === id ? { ...c, [k]: v } : c)));
-
-  const moveCargo = (id, x, y) =>
-    setCargo((cs) => cs.map((c) => (c.id === id ? { ...c, x, y } : c)));
+  const m = meas[sel];
+  const measured = mode === "measured" && live.connected;
+  const lastSample = live.data[live.data.length - 1];
+  const motion = useMemo(
+    () => (measured ? measureMotion(live.data) : null),
+    [measured, live.data],
+  );
+  const liveTilt = useMemo(
+    () =>
+      measured && lastSample
+        ? { roll: lastSample.roll, pitch: lastSample.pitch }
+        : null,
+    [measured, lastSample],
+  );
+  const gmMeasured =
+    motion && Number.isFinite(motion.Tn) ? r.GM * (r.Tn / motion.Tn) ** 2 : NaN;
+  const mFreeboard = measured ? num(m.freeboard) : NaN;
+  const rScene = useMemo(
+    () =>
+      measured && lastSample
+        ? {
+            ...r,
+            heel: lastSample.roll,
+            trim: lastSample.pitch,
+            roll: 0,
+            pitch: 0,
+            heave: 0,
+          }
+        : r,
+    [r, measured, lastSample],
+  );
 
   const sweep = useMemo(() => {
     const out = [];
@@ -299,13 +326,25 @@ export default function App() {
     return out;
   }, [h, cargo, rho, env]);
 
-  const m = meas[sel];
-  const setM = (k, v) => setMeas({ ...meas, [sel]: { ...meas[sel], [k]: v } });
   const checks = [
     ["Freeboard", "freeboard", r.freeboard * 1000, 1, "mm"],
     ["Heel", "heel", Math.abs(r.heel), 2, "°"],
     ["Roll period", "Tn", r.Tn, 2, "s"],
   ];
+
+  useEffect(() => {
+    if (!live.connected) setMode("calculated");
+  }, [live.connected]);
+
+  const setH = (k, v) => setHulls({ ...hulls, [sel]: { ...h, [k]: v } });
+
+  const setC = (id, k, v) =>
+    setCargo(cargo.map((c) => (c.id === id ? { ...c, [k]: v } : c)));
+
+  const moveCargo = (id, x, y) =>
+    setCargo((cs) => cs.map((c) => (c.id === id ? { ...c, x, y } : c)));
+
+  const setM = (k, v) => setMeas({ ...meas, [sel]: { ...meas[sel], [k]: v } });
 
   const loadTests = (ev) => {
     const file = ev.target.files[0];
@@ -337,7 +376,6 @@ export default function App() {
     reader.readAsText(file);
     ev.target.value = "";
   };
-  const sens = sensor[sel];
 
   const exportAll = () => {
     const data = {
@@ -365,12 +403,36 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const row = (
+    label,
+    mv,
+    cv,
+    d,
+    unit,
+    calcTag = "calculated",
+    mTag = "measured",
+  ) =>
+    Number.isFinite(mv)
+      ? [label, f(mv, d), unit, mTag]
+      : [label, f(cv, d), unit, calcTag];
+
   const stats = [
     ["Draft", f(r.draft * 1000), "mm", "calculated"],
-    ["Freeboard", f(r.freeboard * 1000), "mm", "calculated"],
-    ["Heel", f(r.heel, 2), "°", "calculated"],
-    ["GM", f(r.GM * 1000, 0), "mm", "calculated"],
-    ["Roll", f(r.roll), "°", "simulated"],
+    row("Freeboard", mFreeboard, r.freeboard * 1000, 1, "mm"),
+    row("Heel", motion?.heel, r.heel, 2, "°"),
+    row("Trim", motion?.trim, r.trim, 2, "°"),
+    row(
+      "GM",
+      gmMeasured * 1000,
+      r.GM * 1000,
+      0,
+      "mm",
+      "calculated",
+      "estimated",
+    ),
+    row("Roll", motion?.rollAmp, r.roll, 1, "°", "simulated"),
+    row("Pitch", motion?.pitchAmp, r.pitch, 1, "°", "simulated"),
+    row("Roll period", motion?.Tn, r.Tn, 2, "s"),
     ["Drag", f(r.drag, 3), "N", "estimated"],
   ];
 
@@ -578,10 +640,11 @@ export default function App() {
             <Scene
               h={h}
               cargo={cargo}
-              r={r}
+              r={rScene}
               env={env}
               animate={animate}
               onMove={moveCargo}
+              live={liveTilt}
             />
             <div className="overlay tl">
               <Segmented
@@ -597,6 +660,19 @@ export default function App() {
                 onClick={() => setAnimate(!animate)}
               >
                 {animate ? "Waves on" : "Waves off"}
+              </button>
+              <button
+                className={`pill ${mode === "calculated" ? "on" : ""}`}
+                onClick={() => setMode("calculated")}
+              >
+                Calculated
+              </button>
+              <button
+                className={`pill ${mode === "measured" ? "on" : ""}`}
+                disabled={!live.connected}
+                onClick={() => setMode("measured")}
+              >
+                Measured
               </button>
             </div>
             <p className="hint absolute">
@@ -881,7 +957,7 @@ export default function App() {
           </>
         )}
         <div hidden={view !== "dashboard"}>
-          <Dashboard r={r} env={env} cargo={cargo} />
+          <Dashboard r={r} env={env} cargo={cargo} sensor={live} />
         </div>
         {view === "routes" && <RoutePlanner hull={h} cargo={cargo} env={env} />}
       </main>

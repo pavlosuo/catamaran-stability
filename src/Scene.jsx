@@ -20,6 +20,10 @@ const MODEL_URL = "/models/boat.glb";
 const MODEL_ROTATION = [0, 0, 0];
 const WORLD_SCALE = 50;
 const DECK_T = 0.006;
+const LIVE_ROLL_SIGN = 1;
+const LIVE_PITCH_SIGN = 1;
+const TRIM_SIGN = 1;
+const LIVE_SMOOTH = 14;
 
 function PlaceholderHulls({ h, keel }) {
   const y = keel + h.H / 2;
@@ -68,7 +72,7 @@ function CustomModel({ url, h, keel }) {
   return <primitive object={obj} rotation={MODEL_ROTATION} />;
 }
 
-function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
+function Boat({ h, cargo, r, env, animate, live, drag, setDrag, onMove }) {
   const g = useRef();
   const draft = Number.isFinite(r.draft) ? r.draft : 0.03;
   const keel = -draft;
@@ -77,13 +81,24 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
   const heel = Number.isFinite(r.heel) ? r.heel : 0;
   const roll = Number.isFinite(r.roll) ? clamp(r.roll, 0, 25) : 0;
   const deckW = h.s + h.b;
+  const trim = Number.isFinite(r.trim) ? r.trim : 0;
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, dt) => {
     if (!g.current) return;
-    const osc = animate
-      ? roll * Math.sin((2 * Math.PI * clock.elapsedTime) / env.Tw)
-      : 0;
-    g.current.rotation.x = rad(heel + osc);
+    let tx, tz;
+    if (live) {
+      tx = LIVE_ROLL_SIGN * live.roll;
+      tz = LIVE_PITCH_SIGN * live.pitch;
+    } else {
+      const osc = animate
+        ? roll * Math.sin((2 * Math.PI * clock.elapsedTime) / env.Tw)
+        : 0;
+      tx = heel + osc;
+      tz = TRIM_SIGN * trim;
+    }
+    const k = live ? 1 - Math.exp(-dt * LIVE_SMOOTH) : 1;
+    g.current.rotation.x += (rad(tx) - g.current.rotation.x) * k;
+    g.current.rotation.z += (rad(tz) - g.current.rotation.z) * k;
   });
 
   const move = (e) => {
@@ -162,7 +177,7 @@ function Exposure({ value }) {
   return null;
 }
 
-export function Scene({ h, cargo, r, env, animate, onMove }) {
+export function Scene({ h, cargo, r, env, animate, onMove, live }) {
   const [drag, setDrag] = useState(null);
 
   useEffect(() => {
@@ -201,6 +216,7 @@ export function Scene({ h, cargo, r, env, animate, onMove }) {
             drag={drag}
             setDrag={setDrag}
             onMove={onMove}
+            live={live}
           />
         </group>
         <OrbitControls
