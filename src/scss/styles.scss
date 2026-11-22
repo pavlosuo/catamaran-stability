@@ -754,3 +754,10 @@ textarea {
     resize: vertical;
   }
 }
+
+.compare td.good {
+  color: #1a9a4a;
+}
+.compare td.worse {
+  color: #d93025;
+}

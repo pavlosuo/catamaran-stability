@@ -93,20 +93,8 @@ export function RoutePlanner({ hull, cargo, env }) {
         <h2>Route planner</h2>
         <RouteMap selected={sel} onSelect={setSel} />
         <p className="hint">
-          Line color shows water density:{" "}
-          <span
-            style={{
-              display: "inline-block",
-              width: 90,
-              height: 8,
-              verticalAlign: "middle",
-              borderRadius: 4,
-              background: `linear-gradient(90deg, ${densityColor(1003)}, ${densityColor(1015)}, ${densityColor(1027)})`,
-            }}
-          />{" "}
-          brackish to salty. Click a route to select it. Salinity and density
-          are estimated typical values; waypoints are schematic, not for
-          navigation.
+          Click a route to select it. Salinity and density are estimated typical
+          values; waypoints are schematic, not for navigation.
         </p>
       </section>
       <section className="card compare">

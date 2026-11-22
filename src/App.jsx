@@ -3,7 +3,15 @@ import { assess, rollSeries, WATER } from "@/data/physics";
 import { Scene } from "@/Scene";
 import { parseSensor, analyze } from "@/data/motion";
 import { HULLS, CARGO } from "@/data/data";
-import { suggestLayout, f, val, pct, num, getInvalidIds, getZone } from "@/utils";
+import {
+  suggestLayout,
+  f,
+  val,
+  pct,
+  num,
+  getInvalidIds,
+  getZone,
+} from "@/utils";
 import { Dashboard } from "@/Dashboard";
 import { RoutePlanner } from "@/RoutePlanner";
 import { clsx } from "clsx";
@@ -101,7 +109,7 @@ function RollChart({ r, env }) {
           y={H - 8}
           textAnchor="middle"
         >
-          {f((tMax / 4) * i, 0)} s
+          {f((tMax / 4) * i, 1)} s
         </text>
       ))}
       <path className="area" d={area} />
@@ -536,7 +544,7 @@ export default function App() {
                   },
                 ).filter((c, _, arr) => {
                   const invalidCargoIds = getInvalidIds(arr, getZone(h));
-                  return !invalidCargoIds.has(c.id)
+                  return !invalidCargoIds.has(c.id);
                 }),
               )
             }
@@ -872,7 +880,9 @@ export default function App() {
             </section>
           </>
         )}
-        {view === "dashboard" && <Dashboard r={r} env={env} cargo={cargo} />}
+        <div hidden={view !== "dashboard"}>
+          <Dashboard r={r} env={env} cargo={cargo} />
+        </div>
         {view === "routes" && <RoutePlanner hull={h} cargo={cargo} env={env} />}
       </main>
     </div>

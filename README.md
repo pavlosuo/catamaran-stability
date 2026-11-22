@@ -7,9 +7,10 @@ check the model against tank tests. No ballast water: stability comes from the
 hull spacing and the cargo placement.
 
 ## Run
-  npm install
-  npm install leaflet
-  npm run dev
+
+npm install
+npm install leaflet
+npm run dev
 
 The route map needs internet for the map tiles. Without it the routes are
 still drawn on a blank background.

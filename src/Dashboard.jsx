@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LIMITS } from "@/data/physics";
 import { f, avg } from "@/utils";
 
-const KEEP = 200;
+const KEEP = 500;
 
 function TiltChart({ data }) {
   if (data.length < 2) return <p className="hint">Waiting for data…</p>;
@@ -90,6 +90,21 @@ export function Dashboard({ r, env, cargo }) {
     }, 50);
     return () => clearInterval(id);
   }, [source]);
+
+  const saveCsv = () => {
+    const text =
+      "t_ms,roll_deg,pitch_deg\n" +
+      data
+        .map(
+          (d) =>
+            `${Math.round(d.t * 1000)},${d.roll.toFixed(2)},${d.pitch.toFixed(2)}`,
+        )
+        .join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    a.download = "tilt.csv";
+    a.click();
+  };
 
   const connect = async () => {
     if (!("serial" in navigator)) {
@@ -212,6 +227,9 @@ export function Dashboard({ r, env, cargo }) {
               Connect MPU-6050
             </button>
           )}
+          <button className="pill" onClick={saveCsv}>
+            Save CSV
+          </button>
         </p>
         <TiltChart data={data} />
         <p className="hint">

@@ -123,28 +123,25 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
         <planeGeometry args={[2, 2]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {cargo.map(
-        (c) =>
-           (
-            <mesh
-              key={c.id}
-              position={[c.x, top + c.h / 2, c.y]}
-              castShadow
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                setDrag(c.id);
-              }}
-              onPointerOver={() => (document.body.style.cursor = "grab")}
-              onPointerOut={() => (document.body.style.cursor = "")}
-            >
-              <boxGeometry args={[c.l, c.h, c.w]} />
-              <meshStandardMaterial
-                color={r.bad.has(c.id) ? C.bad : C.cargo}
-                roughness={0.45}
-              />
-            </mesh>
-          ),
-      )}
+      {cargo.map((c) => (
+        <mesh
+          key={c.id}
+          position={[c.x, top + c.h / 2, c.y]}
+          castShadow
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            setDrag(c.id);
+          }}
+          onPointerOver={() => (document.body.style.cursor = "grab")}
+          onPointerOut={() => (document.body.style.cursor = "")}
+        >
+          <boxGeometry args={[c.l, c.h, c.w]} />
+          <meshStandardMaterial
+            color={r.bad.has(c.id) ? C.bad : C.cargo}
+            roughness={0.45}
+          />
+        </mesh>
+      ))}
       <mesh
         position={[r.xCG || 0, keel + (r.zCG || 0), r.yCG || 0]}
         renderOrder={10}
