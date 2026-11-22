@@ -3,7 +3,7 @@ import { assess, rollSeries, WATER } from "@/data/physics";
 import { Scene } from "@/Scene";
 import { parseSensor, analyze } from "@/data/motion";
 import { HULLS, CARGO } from "@/data/data";
-import { suggestLayout, f, val, pct, num } from "@/utils";
+import { suggestLayout, f, val, pct, num, getInvalidIds, getZone } from "@/utils";
 import { Dashboard } from "@/Dashboard";
 import { RoutePlanner } from "@/RoutePlanner";
 import { clsx } from "clsx";
@@ -275,8 +275,10 @@ export default function App() {
   const r = res[sel];
 
   const setH = (k, v) => setHulls({ ...hulls, [sel]: { ...h, [k]: v } });
+
   const setC = (id, k, v) =>
     setCargo(cargo.map((c) => (c.id === id ? { ...c, [k]: v } : c)));
+
   const moveCargo = (id, x, y) =>
     setCargo((cs) => cs.map((c) => (c.id === id ? { ...c, x, y } : c)));
 
@@ -532,7 +534,10 @@ export default function App() {
                     deckWidth: h.deckW ?? deckW,
                     deckCenterX: h.deckCx ?? 0,
                   },
-                ),
+                ).filter((c, _, arr) => {
+                  const invalidCargoIds = getInvalidIds(arr, getZone(h));
+                  return !invalidCargoIds.has(c.id)
+                }),
               )
             }
           >

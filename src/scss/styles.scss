@@ -286,7 +286,7 @@ aside {
   border-radius: 12px;
   @media (max-width: 960px) {
     position: static;
-    max-height: auto;
+    max-height: none;
     overflow: hidden;
     border-radius: 0;
   }

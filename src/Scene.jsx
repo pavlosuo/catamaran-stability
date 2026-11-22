@@ -125,7 +125,7 @@ function Boat({ h, cargo, r, env, animate, drag, setDrag, onMove }) {
       </mesh>
       {cargo.map(
         (c) =>
-          !r.bad.has(c.id) && (
+           (
             <mesh
               key={c.id}
               position={[c.x, top + c.h / 2, c.y]}
